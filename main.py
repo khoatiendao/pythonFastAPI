@@ -1,8 +1,9 @@
+from types import new_class
 from typing import Annotated, List
 from uuid import UUID, uuid4
 from fastapi import Depends, FastAPI, HTTPException
 from src.schema.schema import UserCreate
-from src.database.database import Base
+from src.database.database import Base, SessionLocal, get_async_session
 from models import School, User
 from src.config.config_dotenv import settings
 from src.database.database import engine
@@ -36,7 +37,7 @@ def home():
     return {"message" : "Hello FastAPI"}
 
 @app.post("/api/v1/user", response_model=UserCreate)
-async def create_user(user: UserCreate, db: AsyncSession = Depends(User)):
+async def create_user(user: UserCreate, db: AsyncSession = Depends(get_async_session)):
     new_user = User(first_name=user.first_name, 
                     last_name=user.last_name, 
                     gender=user.gender, 
@@ -46,9 +47,9 @@ async def create_user(user: UserCreate, db: AsyncSession = Depends(User)):
     
     db.add(new_user)
     await db.commit()
-    await db.refresh()
+    await db.refresh(new_user)
 
-    return {"message": "Create User Success", "data": new_user}
+    return new_user
 
 
 # # Get user

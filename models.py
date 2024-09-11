@@ -35,4 +35,5 @@ class School(Base):
     name_class = Column(Integer)
     teacher_id = Column(String, ForeignKey('users.id'))
     # teacher = relationship("User", back_populates="Schools")
+    
 
