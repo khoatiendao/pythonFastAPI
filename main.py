@@ -2,17 +2,20 @@ from types import new_class
 from typing import Annotated, List
 from uuid import UUID, uuid4
 from fastapi import FastAPI, HTTPException
-import models
-from src.schema.schema import SchoolUpdate, UserBase, UserUpdate, SchoolBase
+from src.schema.userBook_schema import UserBookBase
+from src.schema.book_schema import BookBase, UpdateBook
+from src.schema.user_schema import UserUpdate
+from src.schema.account_schema import AccountBase
+import src.models
 from src.database.database import Base
-from models import School, User
 from src.config.config_dotenv import settings
 from src.database.database import engine
 from src.database.database import db_dependency
+# from src.utils.validate import validate_password
 
 
 def create_table():
-    models.Base.metadata.create_all(bind=engine)
+    src.models.Base.metadata.create_all(bind=engine)
 
 def start_application():
     app = FastAPI(title=settings.project_name)
@@ -22,7 +25,6 @@ def start_application():
 app = start_application()
 
 # Get demo
-
 @app.get("/config")
 def read_config():
     return {
@@ -33,109 +35,78 @@ def read_config():
 def home():
     return {"message" : "Hello FastAPI"}
 
-@app.post("/api/v1/user")
-async def create_user(user: UserBase, db: db_dependency):
-    db_user = models.User(
-        first_name = user.first_name,
-        last_name = user.last_name,
-        gender = user.gender,
-        email = user.email,
-        password = user.password,
-        role = user.role)
+@app.post("/api/v1/account")
+async def register(account: AccountBase, db: db_dependency):
+    db_account = src.models.Account(
+        email = account.email,
+        password = account.password,)
     
-    db.add(db_user)
+    db.add(db_account)
     db.commit()
-    db.refresh(db_user)
+    db.refresh(db_account)
+    for user in account.users:
+        db_user = src.models.User(
+            account_id = db_account.id
+        )
+        db.add(db_user)
+    db.commit()
 
-    if not db_user:
+    if not db_account:
         raise HTTPException(
             status_code=400,
             detail=f"Please check all information"
         )
-    return db_user
+    return db_account
 
 # Get all user
-@app.get("/api/v1/users")
+@app.get("/api/v1/account")
 async def get_users(db: db_dependency):
-    users = db.query(models.User).all()
-    if not users:
+    account = db.query(src.models.Account).all()
+    if not account:
         raise HTTPException(
             status_code=404,
             detail=f"Not found" 
         )
-    return users;
-
-# Get one user
-@app.get("/api/v1/users/{user_id}")
-async def get_users_id(user_id: str, db: db_dependency):
-    result = db.query(models.User).filter(models.User.id == user_id).first()
-    if not result:
-        raise HTTPException(
-            status_code=404,
-            detail=f"user with id: {user_id} not found"
-        )
-    return result;
-
-# DELETE user
-@app.delete("/api/v1/users/{user_id}")
-async def delete_user(user_id: str, db: db_dependency):
-    result = db.query(models.User).filter(models.User.id == user_id).first()
-    if not result:
-        raise HTTPException(
-            status_code=404,
-            detail=f"user with id: {user_id} not found"
-        )
-    db.delete(result)
-    db.commit()
-    return {"message" : f"Delete user with id: {user_id} successfull"}
-    
+    return account;
 
 # UPDATE user
 @app.put("/api/v1/users/{user_id}")
 async def update_user(user_id: str, user_update: UserUpdate ,db: db_dependency):
-    find_userId = db.query(models.User).filter(models.User.id == user_id).first()
+    find_userId = db.query(src.models.User).filter(src.models.User.user_id == user_id).first()
     if not find_userId:
         raise HTTPException(
             status_code=404,
             detail=f"user with id: {user_id} not found"
         )
     
-    find_userId.first_name = user_update.first_name
-    find_userId.last_name = user_update.last_name
+    find_userId.username = user_update.username
     find_userId.gender = user_update.gender
-    find_userId.email = user_update.email
-    find_userId.password = user_update.password
+    find_userId.birthday = user_update.birthday
+    find_userId.interest = user_update.interest
+    find_userId.major = user_update.major
 
     db.commit()
     db.refresh(find_userId)
     return find_userId;
 
-# POST school
-@app.post("/api/v1/school")
-async def create_school(school: SchoolBase, db: db_dependency):
-    db_school = models.School(
-        name_school = school.name_school,
-        name_class = school.name_class
-    )
-    db.add(db_school)
-    db.commit()
-    db.refresh(db_school)
-    for teacher in school.teachers:
-        db_teacher = models.User(
-        first_name = teacher.first_name,
-        last_name = teacher.last_name,
-        gender = teacher.gender,
-        email = teacher.email,
-        password = teacher.password,
-        role = teacher.role,
-        school_id = db_school.id)
-        db.add(db_teacher)
-    db.commit()
-    return db_school
 
-@app.get("/api/v1/school")
-async def get_school(db: db_dependency):
-    result = db.query(models.School).all()
+
+# POST book
+@app.post("/api/v1/book")
+async def create_book(book: BookBase, db: db_dependency):
+    db_book = src.models.Book(
+        name_book = book.name_book,
+        image_book = book.image_book,
+        author = book.author
+    )
+    db.add(db_book)
+    db.commit()
+    db.refresh(db_book)
+    return db_book
+
+@app.get("/api/v1/book")
+async def get_book(db: db_dependency):
+    result = db.query(src.models.Book).all()
     if not result:
         raise HTTPException(
             status_code=404,
@@ -144,35 +115,77 @@ async def get_school(db: db_dependency):
     return result;
 
 
-@app.get("/api/v1/school/{school_id}")
-async def get_schoolWithUser(school_id: str ,db: db_dependency):
-    result = db.query(models.School).filter(models.School.id == school_id).first()
+@app.get("/api/v1/book/{book_id}")
+async def get_bookWithId(book_id: str ,db: db_dependency):
+    result = db.query(src.models.Book).filter(src.models.Book.id == book_id).first()
 
     if not result:
         raise HTTPException(
             status_code=404,
-            detail=f"School id: {school_id} not found"
+            detail=f"School id: {book_id} not found"
         )
     return result;
 
-# @app.put("/api/v1/school/{school_id}")
-# async def update_school(school_id: str, school_update: SchoolUpdate ,db: db_dependency):
-#     result = db.query(models.School).filter(models.School.id == school_id).first()
-#     print(result.teachers)
+@app.put("/api/v1/book/{book_id}")
+async def update_book(book_id: str, book_update: UpdateBook ,db: db_dependency):
+    result = db.query(src.models.Book).filter(src.models.Book.id == book_id).first()
 
+    if not result:
+        raise HTTPException(
+            status_code=404,
+            detail=f"School id: {book_id} not found"
+        )
+    result.name_school = book_update.name_school
+    result.name_class = book_update.name_class
+    result.teachers = book_update.teachers
+
+    db.commit()
+    db.refresh(result)
+    return result;
+
+@app.post("/api/v1/savebook")
+async def save_book(savebook: UserBookBase, db: db_dependency):
+    user = db.query(src.models.User).filter(src.models.User.user_id == savebook.user_id).first()
+    book = db.query(src.models.Book).filter(src.models.Book.id == savebook.book_id).first()
+    print(book)
+
+    if not user or not book:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Something wrong about save books"
+        )
+    
+    user.book.append(book)
+
+
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return {"user" : savebook.user_id, "book" : savebook.book_id};
+
+# # Get one user
+# @app.get("/api/v1/users/{user_id}")
+# async def get_users_id(user_id: str, db: db_dependency):
+#     result = db.query(models.User).filter(models.User.id == user_id).first()
 #     if not result:
 #         raise HTTPException(
 #             status_code=404,
-#             detail=f"School id: {school_id} not found"
+#             detail=f"user with id: {user_id} not found"
 #         )
-#     result.name_school = school_update.name_school
-#     result.name_class = school_update.name_class
-#     result.teachers = school_update.teachers
-
-#     db.commit()
-#     db.refresh(result)
 #     return result;
 
+# # DELETE user
+# @app.delete("/api/v1/users/{user_id}")
+# async def delete_user(user_id: str, db: db_dependency):
+#     result = db.query(models.User).filter(models.User.id == user_id).first()
+#     if not result:
+#         raise HTTPException(
+#             status_code=404,
+#             detail=f"user with id: {user_id} not found"
+#         )
+#     db.delete(result)
+#     db.commit()
+#     return {"message" : f"Delete user with id: {user_id} successfull"}
         
 
 
